@@ -12,6 +12,9 @@ if __name__ == '__main__':
     # general args
     parser.add_argument('--identified_slides_path', type=str, default='ident')
     parser.add_argument('--deidentified_slides_path', type=str, default='deident')
+    parser.add_argument('--identified_metadata_path', type=str, default=None,
+                        help='Store identified metadata, if specified')
+    parser.add_argument('--label_image_path', type=str, default=None, help='Store label images, if specified.')
 
     args = parser.parse_args()
 
@@ -30,7 +33,8 @@ if __name__ == '__main__':
                 print('iSyntax failed deident: ' + ident_file_path)
 
         elif file_extension == '.svs':
-            if deident_svs_file(ident_file_path, deident_file_path):
+            if deident_svs_file(ident_file_path, deident_file_path,
+                                args.identified_metadata_path, args.label_image_path):
                 print('SVS ' + ident_file_path + ' -> deident -> ' + deident_file_path)
             else:
                 print('SVS failed deident: ' + ident_file_path)

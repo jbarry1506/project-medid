@@ -8,7 +8,9 @@ import traceback
 import uuid
 
 import tifffile
-
+from PIL import Image
+import numpy as np
+from pylibdmtx.pylibdmtx import decode
 
 # Read/modify TIFF files (as in the SVS files) using tiffparser library (stripped down tifffile lib)
 
@@ -46,10 +48,11 @@ def delete_associated_image(slide_path, image_type):
             raise Exception(f'Invalid SVS format: duplicate associated {image_type} images found')
         if num_results == 0:
             # No image of this type in the WSI file; no need to delete it
-            return
+            return None
 
         # At this point, exactly 1 image has been identified to remove
         page = filtered_pages[0]
+        image = page.asarray()
 
         # get the list of IFDs for the various pages
         offsetformat = t.tiff.offsetformat
@@ -116,15 +119,31 @@ def delete_associated_image(slide_path, image_type):
         fp.seek(previfd['next_ifd_offset'])
         fp.write(struct.pack(offsetformat, pageifd['next_ifd_value']))
 
+        return image
 
-def deident_svs_file(original_file_path, deident_file_path):
+
+def deident_svs_file(original_file_path, deident_file_path, identified_metadata_path=None, label_image_path=None):
     try:
         dst_path = os.path.dirname(deident_file_path)
         tmp_file = os.path.join(dst_path, str(uuid.uuid1()))
         # create a tmp file to strip information
         shutil.copyfile(original_file_path, tmp_file)
 
-        delete_associated_image(tmp_file, 'label')
+        label_image = delete_associated_image(tmp_file, 'label')
+
+        if label_image_path is not None:
+            label_image_filename = os.path.basename(original_file_path)
+            Image.fromarray(label_image).save(f'{label_image_path}/{label_image_filename}.png')
+
+        if identified_metadata_path is not None:
+            metadata_filename = os.path.basename(original_file_path)
+            result = decode(label_image)
+            with open(f'{identified_metadata_path}/{metadata_filename}.txt', "wt") as f:
+                if len(result) == 0:
+                    f.writelines(['Barcode not found.'])
+                else:
+                    f.writelines([a.data.decode("utf-8") for a in result])
+
         delete_associated_image(tmp_file, 'macro')
 
         shutil.move(tmp_file, deident_file_path)
