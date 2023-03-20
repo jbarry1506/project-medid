@@ -5,6 +5,7 @@ from os.path import isfile, join
 
 from isyntax import deident_isyntax_file
 from svs import deident_svs_file
+import uuid
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='WSI Slide Deidentifier')
@@ -15,6 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--identified_metadata_path', type=str, default=None,
                         help='Store identified metadata, if specified')
     parser.add_argument('--label_image_path', type=str, default=None, help='Store label images, if specified.')
+    parser.add_argument('--rename_to_uuid', type=int, default=0, help='Set to 1 to rename files to a generated uuid')
 
     args = parser.parse_args()
 
@@ -24,9 +26,11 @@ if __name__ == '__main__':
     for file in onlyfiles:
         filename, file_extension = os.path.splitext(file)
         ident_file_path = os.path.join(args.identified_slides_path, file)
-        deident_file_path = os.path.join(args.deidentified_slides_path, 'deident_' + file)
+        out_file = file if args.rename_to_uuid == 0 else str(uuid.uuid1()) + file_extension
+        deident_file_path = os.path.join(args.deidentified_slides_path, 'deident_' + out_file)
 
         if file_extension == '.isyntax':
+            # TODO: save deidentification metadata (label, uuid filename mapping)
             if deident_isyntax_file(ident_file_path, deident_file_path):
                 print('iSyntax ' + ident_file_path + ' -> deident -> ' + deident_file_path)
             else:

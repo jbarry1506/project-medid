@@ -6,6 +6,7 @@ import shutil
 import struct
 import traceback
 import uuid
+import json
 
 import tifffile
 from PIL import Image
@@ -148,11 +149,13 @@ def deident_svs_file(original_file_path, deident_file_path, identified_metadata_
         if identified_metadata_path is not None:
             metadata_filename = os.path.basename(original_file_path)
             result = decode(label_image)
-            with open(f'{identified_metadata_path}/{metadata_filename}.txt', "wt") as f:
-                if len(result) == 0:
-                    f.writelines(['Barcode not found.'])
-                else:
-                    f.writelines([a.data.decode("utf-8") for a in result])
+            metadata = {
+                'deident_filename': os.path.basename(deident_file_path),
+                'barcode': '' if len(result) == 0 else result[0].data.decode("utf-8")
+
+            }
+            with open(f'{identified_metadata_path}/{metadata_filename}.json', "wt") as f:
+                f.write(json.dumps(metadata, indent=2))
 
         delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
 
