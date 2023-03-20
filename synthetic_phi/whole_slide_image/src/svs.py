@@ -14,8 +14,14 @@ from pylibdmtx.pylibdmtx import decode
 
 # Read/modify TIFF files (as in the SVS files) using tiffparser library (stripped down tifffile lib)
 
+def write_bytes_with_debug(fp, some_bytes, name):
+    # print(f'{fp.tell()=} {len(some_bytes)=} {name=} {some_bytes[:8]=}')
+    fp.write(some_bytes)
+
+
+
 # delete_associated_image will remove a label or macro image from an SVS file
-def delete_associated_image(slide_path, image_type):
+def delete_associated_image(slide_path, image_type, keep_image_entry):
     # THIS WILL ONLY WORK FOR STRIPED IMAGES CURRENTLY, NOT TILED
 
     allowed_image_types = ['label', 'macro'];
@@ -97,27 +103,28 @@ def delete_associated_image(slide_path, image_type):
         # print('Deleting pixel data from image strips')
         for (o, b) in zip(offsets, bytecounts):
             fp.seek(o)
-            fp.write(b'\0' * b)
+            write_bytes_with_debug(fp, b'\0' * b, 'data')
 
-        # iterate over all tags and erase values if necessary
-        # print('Deleting tag values')
-        for key, tag in page.tags.items():
-            fp.seek(tag.valueoffset)
-            fp.write(b'\0' * tag.count)
+        if not keep_image_entry:
+            # iterate over all tags and erase values if necessary
+            # print('Deleting tag values')
+            for key, tag in page.tags.items():
+                fp.seek(tag.valueoffset)
+                write_bytes_with_debug(fp, b'\0' * tag.count, f'tag {key=}')  # TODO: should be valuebytecount?
 
-        offsetsize = t.tiff.offsetsize
-        offsetformat = t.tiff.offsetformat
-        pagebytes = (pageifd['next_ifd_offset'] - pageifd['this']) + offsetsize
+            offsetsize = t.tiff.offsetsize
+            offsetformat = t.tiff.offsetformat
+            pagebytes = (pageifd['next_ifd_offset'] - pageifd['this']) + offsetsize
 
-        # next, zero out the data in this page's header
-        # print('Deleting page header')
-        fp.seek(pageifd['this'])
-        fp.write(b'\0' * pagebytes)
+            # next, zero out the data in this page's header
+            # print('Deleting page header')
+            fp.seek(pageifd['this'])
+            write_bytes_with_debug(fp, b'\0' * pagebytes, 'header')
 
-        # finally, point the previous page's IFD to this one's IFD instead
-        # this will make it not show up the next time the file is opened
-        fp.seek(previfd['next_ifd_offset'])
-        fp.write(struct.pack(offsetformat, pageifd['next_ifd_value']))
+            # finally, point the previous page's IFD to this one's IFD instead
+            # this will make it not show up the next time the file is opened
+            fp.seek(previfd['next_ifd_offset'])
+            write_bytes_with_debug(fp, struct.pack(offsetformat, pageifd['next_ifd_value']), 'next_ifd_value')
 
         return image
 
@@ -129,7 +136,10 @@ def deident_svs_file(original_file_path, deident_file_path, identified_metadata_
         # create a tmp file to strip information
         shutil.copyfile(original_file_path, tmp_file)
 
-        label_image = delete_associated_image(tmp_file, 'label')
+        # Keep label image due to a bug in QuPath/bioformats (https://github.com/ome/bioformats/pull/3962). The contents
+        # (pixels) are removed, only the image record remains, and appears as black image in QuPath. The macro image
+        # below, if kept, results in a stack trace in QuPath. This seems to be due to jpeg vs lzw compression used.
+        label_image = delete_associated_image(tmp_file, 'label', keep_image_entry=True)
 
         if label_image_path is not None:
             label_image_filename = os.path.basename(original_file_path)
@@ -144,7 +154,7 @@ def deident_svs_file(original_file_path, deident_file_path, identified_metadata_
                 else:
                     f.writelines([a.data.decode("utf-8") for a in result])
 
-        delete_associated_image(tmp_file, 'macro')
+        delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
 
         shutil.move(tmp_file, deident_file_path)
         return True
