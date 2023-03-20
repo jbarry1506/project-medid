@@ -15,6 +15,40 @@ from pylibdmtx.pylibdmtx import decode
 
 # Read/modify TIFF files (as in the SVS files) using tiffparser library (stripped down tifffile lib)
 
+TIFF_IMAGE_DESCRIPTION_TAG_CODE = 270
+
+DESCRIPTION_KEY_WHITELIST = [
+    # Datetime
+    'Date',
+    'Time',
+    'Time Zone',
+
+    # Pathology properties
+    'AppMag',
+    'MPP',
+    'Left',
+    'Top',
+    'Rack',
+    'Slide',
+
+    # Image properties
+    'Exposure Scale',
+    'Exposure Time',
+    'Filtered',
+    'Focus Offset',
+    'Gamma',
+    'StripeWidth',
+
+    # Scanner properties
+    'ScannerType',
+    # 'ScanScope ID',  # Intentionally removed.
+    'SessionMode',
+    'CalibrationAverageBlue',
+    'CalibrationAverageGreen',
+    'CalibrationAverageRed',
+    'Scan Warning',
+]
+
 def write_bytes_with_debug(fp, some_bytes, name):
     # print(f'{fp.tell()=} {len(some_bytes)=} {name=} {some_bytes[:8]=}')
     fp.write(some_bytes)
@@ -130,12 +164,47 @@ def delete_associated_image(slide_path, image_type, keep_image_entry):
         return image
 
 
+def filter_description_whitelist(description):
+    desc_kv_pairs = description.split('|')
+    # Do not filter the first key-value, as it is containing the scanner and image information, and thus does not
+    # have a proper key.
+    filtered_desc_kv_pairs = [desc_kv_pairs[0]]
+    for i in range(1, len(desc_kv_pairs)):
+        entries = desc_kv_pairs[i].split('=')
+        assert len(entries) == 2  # Not expecting anything of the format ...|X=A=B|...
+        if entries[0].strip() in DESCRIPTION_KEY_WHITELIST:
+            filtered_desc_kv_pairs.append(f'{entries[0]}={entries[1]}')
+        else:
+            # print(f'Dropping description {entries=}')
+            pass
+
+    filtered_description = '|'.join(filtered_desc_kv_pairs)
+    return filtered_description
+
+
+def filter_image_description_tag_whitelist(slide_path):
+    identified_tags = {}  # Using map in case we would later prefer some other key, e.g. resolutions.
+    with open(slide_path, 'r+b') as fp:
+        t = tifffile.TiffFile(fp)
+        for page_index, page in enumerate(t.pages):
+            for key, tag in page.tags.items():
+                if key == TIFF_IMAGE_DESCRIPTION_TAG_CODE:
+                    # Preserve the original description in case needed later on.
+                    identified_tags[page_index] = tag.value
+                    filtered_description = filter_description_whitelist(tag.value)
+                    tag.overwrite(filtered_description)
+
+    return identified_tags
+
+
 def deident_svs_file(original_file_path, deident_file_path, identified_metadata_path=None, label_image_path=None):
     try:
         dst_path = os.path.dirname(deident_file_path)
         tmp_file = os.path.join(dst_path, str(uuid.uuid1()))
         # create a tmp file to strip information
         shutil.copyfile(original_file_path, tmp_file)
+
+        identified_tags = filter_image_description_tag_whitelist(tmp_file)
 
         # Keep label image due to a bug in QuPath/bioformats (https://github.com/ome/bioformats/pull/3962). The contents
         # (pixels) are removed, only the image record remains, and appears as black image in QuPath. The macro image
@@ -151,7 +220,8 @@ def deident_svs_file(original_file_path, deident_file_path, identified_metadata_
             result = decode(label_image)
             metadata = {
                 'deident_filename': os.path.basename(deident_file_path),
-                'barcode': '' if len(result) == 0 else result[0].data.decode("utf-8")
+                'barcode': '' if len(result) == 0 else result[0].data.decode("utf-8"),
+                'tags': identified_tags,
 
             }
             with open(f'{identified_metadata_path}/{metadata_filename}.json', "wt") as f:
