@@ -17,6 +17,8 @@ if __name__ == '__main__':
                         help='Store identified metadata, if specified')
     parser.add_argument('--label_image_path', type=str, default=None, help='Store label images, if specified.')
     parser.add_argument('--rename_to_uuid', type=int, default=0, help='Set to 1 to rename files to a generated uuid')
+    # parser.add_argument('--hash_before', type=int, default=1, help='Compute the hash of file before deidentification')  # Cheap to compute, part of copy.
+    parser.add_argument('--hash_after', type=int, default=1, help='Compute the hash of file after deidentification')
 
     args = parser.parse_args()
 
@@ -37,8 +39,7 @@ if __name__ == '__main__':
                 print('iSyntax failed deident: ' + ident_file_path)
 
         elif file_extension == '.svs':
-            if deident_svs_file(ident_file_path, deident_file_path,
-                                args.identified_metadata_path, args.label_image_path):
+            if deident_svs_file(ident_file_path, deident_file_path, args):
                 print('SVS ' + ident_file_path + ' -> deident -> ' + deident_file_path)
             else:
                 print('SVS failed deident: ' + ident_file_path)

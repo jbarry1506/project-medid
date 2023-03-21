@@ -7,6 +7,7 @@ import struct
 import traceback
 import uuid
 import json
+import hashlib
 
 import tifffile
 from PIL import Image
@@ -197,12 +198,32 @@ def filter_image_description_tag_whitelist(slide_path):
     return identified_tags
 
 
-def deident_svs_file(original_file_path, deident_file_path, identified_metadata_path=None, label_image_path=None):
+def copy_with_hash(source_file, dest_file):
+    BUF_SIZE = 1024 * 1024
+    sha1 = hashlib.sha1()
+    with open(source_file, 'rb') as f_src:
+        with open(dest_file, 'wb') as f_dst:
+            while data := f_src.read(BUF_SIZE):
+                sha1.update(data)
+                f_dst.write(data)
+    return sha1.hexdigest()
+
+
+def compute_hash(source_file):
+    BUF_SIZE = 1024 * 1024
+    sha1 = hashlib.sha1()
+    with open(source_file, 'rb') as f_src:
+        while data := f_src.read(BUF_SIZE):
+            sha1.update(data)
+    return sha1.hexdigest()
+
+
+def deident_svs_file(original_file_path, deident_file_path, args):
     try:
         dst_path = os.path.dirname(deident_file_path)
         tmp_file = os.path.join(dst_path, str(uuid.uuid1()))
         # create a tmp file to strip information
-        shutil.copyfile(original_file_path, tmp_file)
+        hash_sha1_before = copy_with_hash(original_file_path, tmp_file)
 
         identified_tags = filter_image_description_tag_whitelist(tmp_file)
 
@@ -211,25 +232,31 @@ def deident_svs_file(original_file_path, deident_file_path, identified_metadata_
         # below, if kept, results in a stack trace in QuPath. This seems to be due to jpeg vs lzw compression used.
         label_image = delete_associated_image(tmp_file, 'label', keep_image_entry=True)
 
-        if label_image_path is not None:
+        if args.label_image_path is not None:
             label_image_filename = os.path.basename(original_file_path)
-            Image.fromarray(label_image).save(f'{label_image_path}/{label_image_filename}.png')
+            Image.fromarray(label_image).save(f'{args.label_image_path}/{label_image_filename}.png')
 
-        if identified_metadata_path is not None:
+        delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
+        shutil.move(tmp_file, deident_file_path)
+
+        if args.hash_after:
+            hash_sha1_after = compute_hash(deident_file_path)
+        else:
+            hash_sha1_after = ''
+
+        if args.identified_metadata_path is not None:
             metadata_filename = os.path.basename(original_file_path)
             result = decode(label_image)
             metadata = {
                 'deident_filename': os.path.basename(deident_file_path),
                 'barcode': '' if len(result) == 0 else result[0].data.decode("utf-8"),
+                'hash_sha1_before': hash_sha1_before,
+                'hash_sha1_after': hash_sha1_after,
                 'tags': identified_tags,
-
             }
-            with open(f'{identified_metadata_path}/{metadata_filename}.json', "wt") as f:
+            with open(f'{args.identified_metadata_path}/{metadata_filename}.json', "wt") as f:
                 f.write(json.dumps(metadata, indent=2))
 
-        delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
-
-        shutil.move(tmp_file, deident_file_path)
         return True
     except:
         traceback.print_exc()
