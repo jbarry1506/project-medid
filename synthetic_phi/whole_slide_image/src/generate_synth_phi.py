@@ -16,6 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--identified_metadata_path', type=str, default=None,
                         help='Store identified metadata, if specified')
     parser.add_argument('--label_image_path', type=str, default=None, help='Store label images, if specified.')
+    parser.add_argument('--macro_image_path', type=str, default=None, help='Store macro images, if specified.')
     parser.add_argument('--rename_to_uuid', type=int, default=0, help='Set to 1 to rename files to a generated uuid')
     # parser.add_argument('--hash_before', type=int, default=1, help='Compute the hash of file before deidentification')  # Cheap to compute, part of copy.
     parser.add_argument('--hash_after', type=int, default=1, help='Compute the hash of file after deidentification')
@@ -32,7 +33,7 @@ if __name__ == '__main__':
         deident_file_path = os.path.join(args.deidentified_slides_path, 'deident_' + out_file)
 
         if file_extension == '.isyntax':
-            # TODO: save deidentification metadata (label, uuid filename mapping)
+            # TODO: save deidentification metadata (label, macro, uuid filename mapping)
             if deident_isyntax_file(ident_file_path, deident_file_path):
                 print('iSyntax ' + ident_file_path + ' -> deident -> ' + deident_file_path)
             else:

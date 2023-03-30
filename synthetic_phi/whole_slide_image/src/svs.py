@@ -218,6 +218,12 @@ def compute_hash(source_file):
     return sha1.hexdigest()
 
 
+def save_label_macro_image(filename_prefix, target_path_or_none, image, original_file_path):
+    if target_path_or_none is not None:
+        image_filename = os.path.basename(original_file_path)
+        Image.fromarray(image).save(f'{target_path_or_none}/{filename_prefix}{image_filename}.png')
+
+
 def deident_svs_file(original_file_path, deident_file_path, args):
     try:
         dst_path = os.path.dirname(deident_file_path)
@@ -231,12 +237,11 @@ def deident_svs_file(original_file_path, deident_file_path, args):
         # (pixels) are removed, only the image record remains, and appears as black image in QuPath. The macro image
         # below, if kept, results in a stack trace in QuPath. This seems to be due to jpeg vs lzw compression used.
         label_image = delete_associated_image(tmp_file, 'label', keep_image_entry=True)
+        save_label_macro_image('label_', args.label_image_path, label_image, original_file_path)
 
-        if args.label_image_path is not None:
-            label_image_filename = os.path.basename(original_file_path)
-            Image.fromarray(label_image).save(f'{args.label_image_path}/{label_image_filename}.png')
+        macro_image = delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
+        save_label_macro_image('macro_', args.macro_image_path, macro_image, original_file_path)
 
-        delete_associated_image(tmp_file, 'macro', keep_image_entry=False)
         shutil.move(tmp_file, deident_file_path)
 
         if args.hash_after:
