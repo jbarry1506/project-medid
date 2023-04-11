@@ -12,7 +12,6 @@ import hashlib
 import tifffile
 from PIL import Image
 import numpy as np
-from pylibdmtx.pylibdmtx import decode
 
 # Read/modify TIFF files (as in the SVS files) using tiffparser library (stripped down tifffile lib)
 
@@ -251,10 +250,16 @@ def deident_svs_file(original_file_path, deident_file_path, args):
 
         if args.identified_metadata_path is not None:
             metadata_filename = os.path.basename(original_file_path)
-            result = decode(label_image)
+            if args.decode_barcode:
+                from pylibdmtx.pylibdmtx import decode
+                barcode_result = decode(label_image)
+                barcode_result = '' if len(barcode_result) == 0 else barcode_result[0].data.decode("utf-8")
+            else:
+                barcode_result = ''
+
             metadata = {
                 'deident_filename': os.path.basename(deident_file_path),
-                'barcode': '' if len(result) == 0 else result[0].data.decode("utf-8"),
+                'barcode': barcode_result,
                 'hash_sha1_before': hash_sha1_before,
                 'hash_sha1_after': hash_sha1_after,
                 'tags': identified_tags,

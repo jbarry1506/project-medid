@@ -20,6 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--rename_to_uuid', type=int, default=0, help='Set to 1 to rename files to a generated uuid')
     # parser.add_argument('--hash_before', type=int, default=1, help='Compute the hash of file before deidentification')  # Cheap to compute, part of copy.
     parser.add_argument('--hash_after', type=int, default=1, help='Compute the hash of file after deidentification')
+    parser.add_argument('--decode_barcode', type=int, default=1, help='Decode the barcode, if present.')
 
     args = parser.parse_args()
 
